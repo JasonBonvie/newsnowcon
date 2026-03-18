@@ -72,17 +72,23 @@ class SnowflakeConn(BaseTool):
         warehouse = warehouse if warehouse is not None else os.environ.get(_ENV_WAREHOUSE, "")
         role = role if role is not None else os.environ.get(_ENV_ROLE)
 
-        missing = [
-            name for name, val in (
-                ("account", account), ("user", user),
-                ("database", database), ("schema", schema), ("warehouse", warehouse),
-            )
-            if not val
-        ]
+        # Map param names to their environment variable names
+        required_params = {
+            "account": (_ENV_ACCOUNT, account),
+            "user": (_ENV_USER, user),
+            "database": (_ENV_DATABASE, database),
+            "schema": (_ENV_SCHEMA, schema),
+            "warehouse": (_ENV_WAREHOUSE, warehouse),
+        }
+
+        missing = [(name, env_var) for name, (env_var, val) in required_params.items() if not val]
+
         if missing:
+            missing_details = [f"{name} (env: {env_var})" for name, env_var in missing]
             raise ValueError(
-                f"SnowflakeConn requires: {', '.join(missing)}. "
-                "Pass them explicitly or set the corresponding SNOWFLAKE_* environment variables."
+                f"SnowflakeConn requires: {', '.join(missing_details)}. "
+                f"Pass them explicitly or set the environment variables. "
+                f"Current env check: SNOWFLAKE_ACCOUNT={os.environ.get('SNOWFLAKE_ACCOUNT', '<not set>')}"
             )
 
         super().__init__(
