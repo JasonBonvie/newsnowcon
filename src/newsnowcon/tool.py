@@ -32,6 +32,12 @@ class SnowflakeConnInput(BaseModel):
 class SnowflakeConn(BaseTool):
     """
     Execute SQL in Snowflake using the Python connector with username/password.
+
+    Configuration can be provided either:
+    1. As constructor parameters when instantiating the tool
+    2. Via environment variables (SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, etc.)
+
+    Environment variables are checked at runtime if parameters are not provided.
     """
 
     name: str = "snowflake_conn"
@@ -42,14 +48,15 @@ class SnowflakeConn(BaseTool):
     )
     args_schema: Type[BaseModel] = SnowflakeConnInput
 
-    account: str = Field(..., description="Snowflake account identifier (e.g. xy12345.us-east-1)")
-    user: str = Field(..., description="Snowflake user name")
-    password: Optional[str] = Field(None, description="Snowflake password (use with user)")
-    database: str = Field(..., description="Database to use")
-    schema: str = Field(..., description="Schema to use")
-    warehouse: str = Field(..., description="Warehouse to use")
-    role: Optional[str] = Field(None, description="Role to use (optional)")
-    max_rows: int = Field(1000, description="Maximum rows to return (avoids oversized context).")
+    # Connection parameters - all optional at init time, validated at runtime
+    account: Optional[str] = Field(default=None, description="Snowflake account identifier (e.g. xy12345.us-east-1)")
+    user: Optional[str] = Field(default=None, description="Snowflake user name")
+    password: Optional[str] = Field(default=None, description="Snowflake password")
+    database: Optional[str] = Field(default=None, description="Database to use")
+    sf_schema: Optional[str] = Field(default=None, description="Schema to use")
+    warehouse: Optional[str] = Field(default=None, description="Warehouse to use")
+    role: Optional[str] = Field(default=None, description="Role to use (optional)")
+    max_rows: int = Field(default=1000, description="Maximum rows to return (avoids oversized context).")
 
     def __init__(
         self,
@@ -57,67 +64,94 @@ class SnowflakeConn(BaseTool):
         user: Optional[str] = None,
         password: Optional[str] = None,
         database: Optional[str] = None,
-        schema: Optional[str] = None,
+        sf_schema: Optional[str] = None,
         warehouse: Optional[str] = None,
         role: Optional[str] = None,
         max_rows: int = 1000,
         **kwargs: Any,
     ):
-        # Allow no-arg instantiation (e.g. CrewAI Studio) by reading from environment
-        account = account if account is not None else os.environ.get(_ENV_ACCOUNT, "")
-        user = user if user is not None else os.environ.get(_ENV_USER, "")
-        password = password if password is not None else os.environ.get(_ENV_PASSWORD)
-        database = database if database is not None else os.environ.get(_ENV_DATABASE, "")
-        schema = schema if schema is not None else os.environ.get(_ENV_SCHEMA, "")
-        warehouse = warehouse if warehouse is not None else os.environ.get(_ENV_WAREHOUSE, "")
-        role = role if role is not None else os.environ.get(_ENV_ROLE)
+        """
+        Initialize the Snowflake connector tool.
 
-        # Map param names to their environment variable names
-        required_params = {
-            "account": (_ENV_ACCOUNT, account),
-            "user": (_ENV_USER, user),
-            "database": (_ENV_DATABASE, database),
-            "schema": (_ENV_SCHEMA, schema),
-            "warehouse": (_ENV_WAREHOUSE, warehouse),
-        }
-
-        missing = [(name, env_var) for name, (env_var, val) in required_params.items() if not val]
-
-        if missing:
-            missing_details = [f"{name} (env: {env_var})" for name, env_var in missing]
-            raise ValueError(
-                f"SnowflakeConn requires: {', '.join(missing_details)}. "
-                f"Pass them explicitly or set the environment variables. "
-                f"Current env check: SNOWFLAKE_ACCOUNT={os.environ.get('SNOWFLAKE_ACCOUNT', '<not set>')}"
-            )
-
+        All connection parameters are optional at init time. They will be resolved
+        from environment variables at runtime if not provided here.
+        """
         super().__init__(
             account=account,
             user=user,
             password=password,
             database=database,
-            schema=schema,
+            sf_schema=sf_schema,
             warehouse=warehouse,
             role=role,
             max_rows=max_rows,
             **kwargs,
         )
 
+    def _get_config(self) -> dict:
+        """
+        Resolve configuration from instance attributes or environment variables.
+        Returns a dict with all config values and a list of any missing required fields.
+        """
+        config = {
+            "account": self.account or os.environ.get(_ENV_ACCOUNT, ""),
+            "user": self.user or os.environ.get(_ENV_USER, ""),
+            "password": self.password or os.environ.get(_ENV_PASSWORD, ""),
+            "database": self.database or os.environ.get(_ENV_DATABASE, ""),
+            "schema": self.sf_schema or os.environ.get(_ENV_SCHEMA, ""),
+            "warehouse": self.warehouse or os.environ.get(_ENV_WAREHOUSE, ""),
+            "role": self.role or os.environ.get(_ENV_ROLE),
+        }
+
+        # Check for missing required fields
+        required_fields = {
+            "account": _ENV_ACCOUNT,
+            "user": _ENV_USER,
+            "database": _ENV_DATABASE,
+            "schema": _ENV_SCHEMA,
+            "warehouse": _ENV_WAREHOUSE,
+        }
+
+        missing = []
+        for field, env_var in required_fields.items():
+            if not config.get(field):
+                missing.append(f"{field} (env: {env_var})")
+
+        return config, missing
+
     def _run(self, query: str) -> str:
         """Execute the SQL query and return results as a JSON string."""
         if not query.strip():
             return json.dumps({"error": "Empty query"})
 
+        # Resolve configuration at runtime
+        config, missing = self._get_config()
+
+        if missing:
+            return json.dumps({
+                "error": f"Missing required Snowflake configuration: {', '.join(missing)}",
+                "hint": "Set these as environment variables or configure the tool parameters in CrewAI Studio.",
+                "available_env_vars": {
+                    "SNOWFLAKE_ACCOUNT": os.environ.get(_ENV_ACCOUNT, "<not set>"),
+                    "SNOWFLAKE_USER": os.environ.get(_ENV_USER, "<not set>"),
+                    "SNOWFLAKE_PASSWORD": "<hidden>" if os.environ.get(_ENV_PASSWORD) else "<not set>",
+                    "SNOWFLAKE_DATABASE": os.environ.get(_ENV_DATABASE, "<not set>"),
+                    "SNOWFLAKE_SCHEMA": os.environ.get(_ENV_SCHEMA, "<not set>"),
+                    "SNOWFLAKE_WAREHOUSE": os.environ.get(_ENV_WAREHOUSE, "<not set>"),
+                    "SNOWFLAKE_ROLE": os.environ.get(_ENV_ROLE, "<not set>"),
+                }
+            }, indent=2)
+
         conn = None
         try:
             conn = snowflake.connector.connect(
-                account=self.account,
-                user=self.user,
-                password=self.password,
-                database=self.database,
-                schema=self.schema,
-                warehouse=self.warehouse,
-                role=self.role,
+                account=config["account"],
+                user=config["user"],
+                password=config["password"],
+                database=config["database"],
+                schema=config["schema"],
+                warehouse=config["warehouse"],
+                role=config["role"],
             )
             cur = conn.cursor()
             try:
