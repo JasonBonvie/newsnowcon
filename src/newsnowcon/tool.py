@@ -135,3 +135,7 @@ class SnowflakeConn(BaseTool):
                     conn.close()
                 except Exception:
                     pass
+
+
+# Alias for backward compatibility and CrewAI Studio
+Newsnowcon = SnowflakeConn

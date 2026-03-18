@@ -1,3 +1,3 @@
-from .tool import SnowflakeConn
+from .tool import SnowflakeConn, Newsnowcon
 
-__all__ = ["SnowflakeConn"]
+__all__ = ["SnowflakeConn", "Newsnowcon"]
