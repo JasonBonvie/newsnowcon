@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 
 # Environment variable names for no-arg / CrewAI Studio usage
-_ENV_ACCOUNT = "SNOWFLAKE_ACCOUNT"
+_ENV_ACCOUNT = "SNOWFLAKE_ACC"
 _ENV_USER = "SNOWFLAKE_USER"
 _ENV_PASSWORD = "SNOWFLAKE_PASSWORD"
 _ENV_DATABASE = "SNOWFLAKE_DATABASE"
