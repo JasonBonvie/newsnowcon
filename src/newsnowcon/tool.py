@@ -35,7 +35,7 @@ class SnowflakeConn(BaseTool):
 
     Configuration can be provided either:
     1. As constructor parameters when instantiating the tool
-    2. Via environment variables (SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, etc.)
+    2. Via environment variables (SNOWFLAKE_ACC, SNOWFLAKE_USER, etc.)
 
     Environment variables are checked at runtime if parameters are not provided.
     """
@@ -132,7 +132,7 @@ class SnowflakeConn(BaseTool):
                 "error": f"Missing required Snowflake configuration: {', '.join(missing)}",
                 "hint": "Set these as environment variables or configure the tool parameters in CrewAI Studio.",
                 "available_env_vars": {
-                    "SNOWFLAKE_ACCOUNT": os.environ.get(_ENV_ACCOUNT, "<not set>"),
+                    "SNOWFLAKE_ACC": os.environ.get(_ENV_ACCOUNT, "<not set>"),
                     "SNOWFLAKE_USER": os.environ.get(_ENV_USER, "<not set>"),
                     "SNOWFLAKE_PASSWORD": "<hidden>" if os.environ.get(_ENV_PASSWORD) else "<not set>",
                     "SNOWFLAKE_DATABASE": os.environ.get(_ENV_DATABASE, "<not set>"),
